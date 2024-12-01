@@ -22,6 +22,7 @@ pub type Value = u64;
 #[cfg(feature = "liquid")]
 pub use confidential::Value;
 
+use crate::config::{get_config};
 #[derive(Debug, Copy, Clone, PartialEq, Hash, Serialize, Ord, PartialOrd, Eq)]
 pub enum Network {
     #[cfg(not(feature = "liquid"))]
@@ -44,7 +45,12 @@ pub enum Network {
 impl Network {
     #[cfg(not(feature = "liquid"))]
     pub fn magic(self) -> u32 {
-        u32::from_le_bytes(BNetwork::from(self).magic().to_bytes())
+        let c = get_config();
+        if let Some(magic) = c.magic {
+          magic
+        } else {
+          u32::from_le_bytes(BNetwork::from(self).magic().to_bytes())
+        }
     }
 
     #[cfg(feature = "liquid")]

@@ -171,7 +171,6 @@ const fn val(c: u8, idx: usize) -> Result<u8, FromHexError> {
     }
 }
 
-#[cfg(feature = "alloc")]
 impl FromHex for Vec<u8> {
     type Error = FromHexError;
 
@@ -248,7 +247,6 @@ pub fn encode_upper<T: AsRef<[u8]>>(data: T) -> String {
 /// assert_eq!(hex::decode("123"), Err(hex::FromHexError::OddLength));
 /// assert!(hex::decode("foo").is_err());
 /// ```
-#[cfg(feature = "alloc")]
 pub fn decode<T: AsRef<[u8]>>(data: T) -> Result<Vec<u8>, FromHexError> {
     FromHex::from_hex(data)
 }

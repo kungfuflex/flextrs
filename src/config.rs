@@ -5,6 +5,8 @@ use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::convert::{TryInto};
+use crate::hex;
 use stderrlog;
 
 use crate::chain::Network;
@@ -26,7 +28,9 @@ pub struct Config {
     pub blocks_dir: PathBuf,
     pub daemon_rpc_addr: SocketAddr,
     pub daemon_parallelism: usize,
+    pub magic: Option<u32>,
     pub cookie: Option<String>,
+    pub auth: Option<String>,
     pub electrum_rpc_addr: SocketAddr,
     pub http_addr: SocketAddr,
     pub http_socket_file: Option<PathBuf>,
@@ -69,6 +73,14 @@ fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
         .collect::<Vec<_>>()
         .pop()
         .unwrap()
+}
+
+static mut _CONFIG: Option<Config> = None;
+
+pub fn get_config() -> Config {
+  unsafe {
+    _CONFIG.as_ref().unwrap().clone()
+  }
 }
 
 impl Config {
@@ -116,6 +128,15 @@ impl Config {
                     .help("JSONRPC authentication cookie ('USER:PASSWORD', default: read from ~/.bitcoin/.cookie)")
                     .takes_value(true),
             )
+            .arg(Arg::with_name("auth")
+                .long("auth")
+                .help("JSONRPC authentication USER:PASSWORD string")
+                .takes_value(true)
+            )
+            .arg(Arg::with_name("magic")
+                .long("magic")
+                .help("magic bytes (in hex) for target blockchain")
+                .takes_value(true))
             .arg(
                 Arg::with_name("network")
                     .long("network")
@@ -385,7 +406,8 @@ impl Config {
             .value_of("blocks_dir")
             .map(PathBuf::from)
             .unwrap_or_else(|| daemon_dir.join("blocks"));
-        let cookie = m.value_of("cookie").map(|s| s.to_owned());
+        let auth = m.value_of("auth").map(|s| s.to_owned());
+        let cookie = if auth.is_some() { Some(auth.clone().unwrap()) } else { m.value_of("cookie").map(|s| s.to_owned()) };
 
         let electrum_banner = m.value_of("electrum_banner").map_or_else(
             || format!("Welcome to electrs-esplora {}", ELECTRS_VERSION),
@@ -411,9 +433,11 @@ impl Config {
             db_path,
             daemon_dir,
             blocks_dir,
+            auth: auth.clone(),
             daemon_rpc_addr,
             daemon_parallelism: value_t_or_exit!(m, "daemon_parallelism", usize),
             cookie,
+            magic: m.value_of("magic").map(|v| u32::from_le_bytes(<&[u8] as TryInto<[u8; 4]>>::try_into(<Vec<u8> as AsRef<[u8]>>::as_ref(&hex::decode(&v.to_owned()).unwrap())).unwrap())),
             utxos_limit: value_t_or_exit!(m, "utxos_limit", usize),
             electrum_rpc_addr,
             electrum_txs_limit: value_t_or_exit!(m, "electrum_txs_limit", usize),
@@ -446,6 +470,9 @@ impl Config {
             tor_proxy: m.value_of("tor_proxy").map(|s| s.parse().unwrap()),
         };
         eprintln!("{:?}", config);
+        unsafe {
+          _CONFIG = Some(config.clone());
+        }
         config
     }
 

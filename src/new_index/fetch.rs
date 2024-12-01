@@ -3,9 +3,10 @@ use rayon::prelude::*;
 #[cfg(feature = "liquid")]
 use crate::elements::ebcompact::*;
 #[cfg(not(feature = "liquid"))]
-use bitcoin::consensus::encode::{deserialize, Decodable};
+use bitcoin::consensus::encode::{Decodable};
 #[cfg(feature = "liquid")]
 use elements::encode::{deserialize, Decodable};
+use crate::block::{AuxpowBlock};
 
 use std::collections::HashMap;
 use std::fs;
@@ -200,6 +201,13 @@ fn blkfiles_parser(blobs: Fetcher<Vec<u8>>, magic: u32) -> Fetcher<Vec<SizedBloc
     )
 }
 
+pub fn to_block(block: bitcoin::Block) -> Block {
+  Block {
+    txdata: block.txdata,
+    header: block.header
+  }
+}
+
 fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<SizedBlock>> {
     let mut cursor = Cursor::new(&blob);
     let mut slices = vec![];
@@ -245,7 +253,7 @@ fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<SizedBlock>> {
     Ok(pool.install(|| {
         slices
             .into_par_iter()
-            .map(|(slice, size)| (deserialize(slice).expect("failed to parse Block"), size))
+            .map(|(slice, size)| (to_block(AuxpowBlock::parse(&mut std::io::Cursor::new(slice.to_vec())).expect("failed to parse Block").to_consensus()), size))
             .collect()
     }))
 }

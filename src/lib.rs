@@ -17,14 +17,20 @@ extern crate serde_json;
 extern crate lazy_static;
 
 pub mod chain;
+pub mod block;
+pub mod utils;
+pub mod byte_view;
 pub mod config;
 pub mod daemon;
+pub mod hex;
 pub mod electrum;
 pub mod errors;
 pub mod metrics;
 pub mod new_index;
 pub mod rest;
 pub mod signal;
+pub mod hex_serde;
+pub mod hex_error;
 pub mod util;
 
 #[cfg(feature = "liquid")]

@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{env, fs, io};
 
+use crate::block::{AuxpowHeader, AuxpowBlock};
 use base64::prelude::{Engine, BASE64_STANDARD};
 use error_chain::ChainedError;
 use hex::FromHex;
@@ -61,16 +62,13 @@ fn header_from_value(value: Value) -> Result<BlockHeader> {
         .as_str()
         .chain_err(|| format!("non-string header: {}", value))?;
     let header_bytes = Vec::from_hex(header_hex).chain_err(|| "non-hex header")?;
-    Ok(
-        deserialize(&header_bytes)
-            .chain_err(|| format!("failed to parse header {}", header_hex))?,
-    )
+    Ok(AuxpowHeader::parse(&mut std::io::Cursor::new(header_bytes)).unwrap().into())
 }
 
 fn block_from_value(value: Value) -> Result<Block> {
     let block_hex = value.as_str().chain_err(|| "non-string block")?;
     let block_bytes = Vec::from_hex(block_hex).chain_err(|| "non-hex block")?;
-    Ok(deserialize(&block_bytes).chain_err(|| format!("failed to parse block {}", block_hex))?)
+    Ok(AuxpowBlock::parse(&mut std::io::Cursor::new(block_bytes)).unwrap().to_consensus())
 }
 
 fn tx_from_value(value: Value) -> Result<Transaction> {

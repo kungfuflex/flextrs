@@ -208,6 +208,9 @@ impl Config {
                     .help("Path to file with list of scripts to pre-cache")
                     .takes_value(true)
             )
+            .arg(Arg::with_name("p2sh_prefix").long("p2sh-prefix").help("p2sh prefix").takes_value(true))
+            .arg(Arg::with_name("p2pkh_prefix").long("p2pkh-prefix").help("p2pkh prefix").takes_value(true))
+            .arg(Arg::with_name("bech32_prefix").long("bech32-prefix").help("bech32 prefix").takes_value(true))
             .arg(
                 Arg::with_name("utxos_limit")
                     .long("utxos-limit")

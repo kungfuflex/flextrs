@@ -35,14 +35,14 @@ fn main() {
             config.daemon_rpc_addr,
             config.daemon_parallelism,
             config.cookie_getter(),
-            config.network_type,
+            config.network_name.clone(),
             signal,
             &metrics,
         )
         .unwrap(),
     );
 
-    let chain = ChainQuery::new(Arc::clone(&store), Arc::clone(&daemon), &config, &metrics);
+    let chain = ChainQuery::new(Arc::clone(&store), Arc::clone(&daemon), &config.clone(), &metrics);
 
     let mut indexer = Indexer::open(Arc::clone(&store), FetchFrom::Bitcoind, &config, &metrics);
     indexer.update(&daemon).unwrap();

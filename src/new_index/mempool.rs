@@ -95,8 +95,8 @@ impl Mempool {
         }
     }
 
-    pub fn network(&self) -> Network {
-        self.config.network_type
+    pub fn network(&self) -> String {
+        self.config.network_name.clone()
     }
 
     pub fn lookup_txn(&self, txid: &Txid) -> Option<Transaction> {
@@ -339,7 +339,7 @@ impl Mempool {
             let txid_bytes = full_hash(&txid[..]);
 
             // Get feeinfo for caching and recent tx overview
-            let feeinfo = TxFeeInfo::new(&tx, &prevouts, self.config.network_type);
+            let feeinfo = TxFeeInfo::new(&tx, &prevouts);
 
             // recent is an ArrayDeque that automatically evicts the oldest elements
             self.recent.push_front(TxOverview {
@@ -404,7 +404,7 @@ impl Mempool {
             #[cfg(feature = "liquid")]
             asset::index_mempool_tx_assets(
                 &tx,
-                self.config.network_type,
+                self.config.network_name.clone(),
                 self.config.parent_network,
                 &mut self.asset_history,
                 &mut self.asset_issuance,

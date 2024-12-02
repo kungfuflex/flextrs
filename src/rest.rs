@@ -2,14 +2,16 @@ use crate::chain::{
     address, BlockHash, Network, OutPoint, Script, Sequence, Transaction, TxIn, TxMerkleNode,
     TxOut, Txid,
 };
-use crate::config::Config;
+use crate::config::{get_config, Config};
 use crate::errors;
+use bitcoin::address::{AddressEncoding, Payload};
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::{
     create_socket, electrum_merkle, extract_tx_prevouts, get_innerscripts, get_tx_fee, has_prevout,
     is_coinbase, BlockHeaderMeta, BlockId, FullHash, ScriptToAddr, ScriptToAsm, TransactionStatus,
     DEFAULT_BLOCKHASH,
 };
+use bitcoin::bech32::{Hrp, hrp};
 
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode;
@@ -151,7 +153,7 @@ impl TransactionValue {
             .map(|txout| TxOutValue::new(txout, config))
             .collect();
 
-        let fee = get_tx_fee(&tx, &prevouts, config.network_type);
+        let fee = get_tx_fee(&tx, &prevouts);
 
         let weight = tx.weight();
         #[cfg(not(feature = "liquid"))] // rust-bitcoin has a wrapper Weight type
@@ -283,7 +285,16 @@ struct TxOutValue {
     #[serde(skip_serializing_if = "Option::is_none")]
     pegout: Option<PegoutValue>,
 }
-
+pub fn to_address_str(script: &Script) -> Option<String> {
+    let config = get_config();
+    Some(format!("{}", AddressEncoding {
+      p2pkh_prefix: config.p2pkh_prefix?,
+      p2sh_prefix: config.p2sh_prefix?,
+      hrp: Hrp::parse_unchecked(&config.bech32_prefix?),
+      payload: &Payload::from_script(script).ok()?
+    }))
+}
+      
 impl TxOutValue {
     fn new(txout: &TxOut, config: &Config) -> Self {
         #[cfg(not(feature = "liquid"))]
@@ -298,7 +309,7 @@ impl TxOutValue {
 
         let script = &txout.script_pubkey;
         let script_asm = script.to_asm();
-        let script_addr = script.to_address_str(config.network_type);
+        let script_addr = to_address_str(script);
 
         // TODO should the following something to put inside rust-elements lib?
         let script_type = if is_fee {
@@ -325,23 +336,13 @@ impl TxOutValue {
             "unknown"
         };
 
-        #[cfg(feature = "liquid")]
-        let pegout = PegoutValue::from_txout(txout, config.network_type, config.parent_network);
 
         TxOutValue {
             scriptpubkey: script.clone(),
             scriptpubkey_asm: script_asm,
             scriptpubkey_address: script_addr,
             scriptpubkey_type: script_type.to_string(),
-            value,
-            #[cfg(feature = "liquid")]
-            valuecommitment: txout.value.commitment(),
-            #[cfg(feature = "liquid")]
-            asset: txout.asset.explicit(),
-            #[cfg(feature = "liquid")]
-            assetcommitment: txout.asset.commitment(),
-            #[cfg(feature = "liquid")]
-            pegout,
+            value
         }
     }
 }
@@ -730,7 +731,7 @@ fn handle_request(
         }
         (&Method::GET, Some(script_type @ &"address"), Some(script_str), None, None, None)
         | (&Method::GET, Some(script_type @ &"scripthash"), Some(script_str), None, None, None) => {
-            let script_hash = to_scripthash(script_type, script_str, config.network_type)?;
+            let script_hash = to_scripthash(script_type, script_str)?;
             let stats = query.stats(&script_hash[..]);
             json_response(
                 json!({
@@ -757,7 +758,7 @@ fn handle_request(
             None,
             None,
         ) => {
-            let script_hash = to_scripthash(script_type, script_str, config.network_type)?;
+            let script_hash = to_scripthash(script_type, script_str)?;
 
             let mut txs = vec![];
 
@@ -796,7 +797,7 @@ fn handle_request(
             Some(&"chain"),
             last_seen_txid,
         ) => {
-            let script_hash = to_scripthash(script_type, script_str, config.network_type)?;
+            let script_hash = to_scripthash(script_type, script_str)?;
             let last_seen_txid = last_seen_txid.and_then(|txid| Txid::from_str(txid).ok());
 
             let txs = query
@@ -828,7 +829,7 @@ fn handle_request(
             Some(&"mempool"),
             None,
         ) => {
-            let script_hash = to_scripthash(script_type, script_str, config.network_type)?;
+            let script_hash = to_scripthash(script_type, script_str)?;
 
             let txs = query
                 .mempool()
@@ -856,7 +857,7 @@ fn handle_request(
             None,
             None,
         ) => {
-            let script_hash = to_scripthash(script_type, script_str, config.network_type)?;
+            let script_hash = to_scripthash(script_type, script_str)?;
             let utxos: Vec<UtxoValue> = query
                 .utxo(&script_hash[..])?
                 .into_iter()
@@ -1193,32 +1194,16 @@ fn blocks(query: &Query, start_height: Option<usize>) -> Result<Response<Body>, 
 fn to_scripthash(
     script_type: &str,
     script_str: &str,
-    network: Network,
 ) -> Result<FullHash, HttpError> {
     match script_type {
-        "address" => address_to_scripthash(script_str, network),
+        "address" => address_to_scripthash(script_str),
         "scripthash" => parse_scripthash(script_str),
         _ => bail!("Invalid script type".to_string()),
     }
 }
 
-fn address_to_scripthash(addr: &str, network: Network) -> Result<FullHash, HttpError> {
-    #[cfg(not(feature = "liquid"))]
+fn address_to_scripthash(addr: &str) -> Result<FullHash, HttpError> {
     let addr = address::Address::from_str(addr)?;
-    #[cfg(feature = "liquid")]
-    let addr = address::Address::parse_with_params(addr, network.address_params())?;
-
-    #[cfg(not(feature = "liquid"))]
-    let is_expected_net = addr.is_valid_for_network(network.into());
-
-    #[cfg(feature = "liquid")]
-    let is_expected_net = addr.params == network.address_params();
-
-    if !is_expected_net {
-        bail!(HttpError::from("Address on invalid network".to_string()))
-    }
-
-    #[cfg(not(feature = "liquid"))]
     let addr = addr.assume_checked();
 
     Ok(compute_script_hash(&addr.script_pubkey()))

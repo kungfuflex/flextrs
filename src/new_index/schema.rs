@@ -7,6 +7,7 @@ use crypto::sha2::Sha256;
 use hex::FromHex;
 use itertools::Itertools;
 use rayon::prelude::*;
+use crate::rest::{to_address_str};
 
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode::{deserialize, serialize};
@@ -174,9 +175,7 @@ struct IndexerConfig {
     light_mode: bool,
     address_search: bool,
     index_unspendables: bool,
-    network: Network,
-    #[cfg(feature = "liquid")]
-    parent_network: crate::chain::BNetwork,
+    network: String
 }
 
 impl From<&Config> for IndexerConfig {
@@ -185,9 +184,7 @@ impl From<&Config> for IndexerConfig {
             light_mode: config.light_mode,
             address_search: config.address_search,
             index_unspendables: config.index_unspendables,
-            network: config.network_type,
-            #[cfg(feature = "liquid")]
-            parent_network: config.parent_network,
+            network: config.network_name.clone()
         }
     }
 }
@@ -197,7 +194,7 @@ pub struct ChainQuery {
     daemon: Arc<Daemon>,
     light_mode: bool,
     duration: HistogramVec,
-    network: Network,
+    network: String
 }
 
 // TODO: &[Block] should be an iterator / a queue.
@@ -355,7 +352,7 @@ impl ChainQuery {
             store,
             daemon,
             light_mode: config.light_mode,
-            network: config.network_type,
+            network: config.network_name.clone(),
             duration: metrics.histogram_vec(
                 HistogramOpts::new("query_duration", "Index query duration (in seconds)"),
                 &["name"],
@@ -363,8 +360,8 @@ impl ChainQuery {
         }
     }
 
-    pub fn network(&self) -> Network {
-        self.network
+    pub fn network(&self) -> String {
+        self.network.clone()
     }
 
     pub fn store(&self) -> &Store {
@@ -1098,7 +1095,7 @@ fn index_transaction(
             rows.push(history.into_row());
 
             if iconfig.address_search {
-                if let Some(row) = addr_search_row(&txo.script_pubkey, iconfig.network) {
+                if let Some(row) = addr_search_row(&txo.script_pubkey) {
                     rows.push(row);
                 }
             }
@@ -1145,8 +1142,8 @@ fn index_transaction(
     );
 }
 
-fn addr_search_row(spk: &Script, network: Network) -> Option<DBRow> {
-    spk.to_address_str(network).map(|address| DBRow {
+fn addr_search_row(spk: &Script) -> Option<DBRow> {
+    to_address_str(spk).map(|address| DBRow {
         key: [b"a", address.as_bytes()].concat(),
         value: vec![],
     })

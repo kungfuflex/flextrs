@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
+use crate::config::{Config, get_config};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -288,7 +289,7 @@ impl Counter {
 pub struct Daemon {
     daemon_dir: PathBuf,
     blocks_dir: PathBuf,
-    network: Network,
+    network: String,
     conn: Mutex<Connection>,
     message_id: Counter, // for monotonic JSONRPC 'id'
     signal: Waiter,
@@ -307,7 +308,7 @@ impl Daemon {
         daemon_rpc_addr: SocketAddr,
         daemon_parallelism: usize,
         cookie_getter: Arc<dyn CookieGetter>,
-        network: Network,
+        network: String,
         signal: Waiter,
         metrics: &Metrics,
     ) -> Result<Daemon> {
@@ -373,7 +374,7 @@ impl Daemon {
         Ok(Daemon {
             daemon_dir: self.daemon_dir.clone(),
             blocks_dir: self.blocks_dir.clone(),
-            network: self.network,
+            network: self.network.clone(),
             conn: Mutex::new(self.conn.lock().unwrap().reconnect()?),
             message_id: Counter::new(),
             signal: self.signal.clone(),
@@ -415,7 +416,7 @@ impl Daemon {
     }
 
     pub fn magic(&self) -> u32 {
-        self.network.magic()
+        get_config().magic.unwrap()
     }
 
     fn call_jsonrpc(&self, method: &str, request: &Value) -> Result<Value> {

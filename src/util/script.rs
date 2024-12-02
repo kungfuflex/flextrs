@@ -24,21 +24,6 @@ impl ScriptToAsm for elements::Script {}
 pub trait ScriptToAddr {
     fn to_address_str(&self, network: Network) -> Option<String>;
 }
-#[cfg(not(feature = "liquid"))]
-impl ScriptToAddr for bitcoin::Script {
-    fn to_address_str(&self, network: Network) -> Option<String> {
-        bitcoin::Address::from_script(self, network.into())
-            .map(|s| s.to_string())
-            .ok()
-    }
-}
-#[cfg(feature = "liquid")]
-impl ScriptToAddr for elements::Script {
-    fn to_address_str(&self, network: Network) -> Option<String> {
-        elements_address::Address::from_script(self, None, network.address_params())
-            .map(|a| a.to_string())
-    }
-}
 
 // Returns the witnessScript in the case of p2wsh, or the redeemScript in the case of p2sh.
 pub fn get_innerscripts(txin: &TxIn, prevout: &TxOut) -> InnerScripts {

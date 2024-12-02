@@ -22,7 +22,10 @@ const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct Config {
     // See below for the documentation of each field:
     pub log: stderrlog::StdErrLog,
-    pub network_type: Network,
+    pub network_name: String,
+    pub p2sh_prefix: Option<u8>,
+    pub p2pkh_prefix: Option<u8>,
+    pub bech32_prefix: Option<String>,
     pub db_path: PathBuf,
     pub daemon_dir: PathBuf,
     pub blocks_dir: PathBuf,
@@ -280,89 +283,16 @@ impl Config {
         let m = args.get_matches();
 
         let network_name = m.value_of("network").unwrap_or("mainnet");
-        let network_type = Network::from(network_name);
+        let p2sh_prefix = m.value_of("p2sh_prefix");
+        let p2pkh_prefix = m.value_of("p2pkh_prefix");
+        let bech32_prefix = m.value_of("bech32_prefix");
         let db_dir = Path::new(m.value_of("db_dir").unwrap_or("./db"));
         let db_path = db_dir.join(network_name);
 
-        #[cfg(feature = "liquid")]
-        let parent_network = m
-            .value_of("parent_network")
-            .map(|s| s.parse().expect("invalid parent network"))
-            .unwrap_or_else(|| match network_type {
-                Network::Liquid => BNetwork::Bitcoin,
-                // XXX liquid testnet/regtest don't have a parent chain
-                Network::LiquidTestnet | Network::LiquidRegtest => BNetwork::Regtest,
-            });
-
-        #[cfg(feature = "liquid")]
-        let asset_db_path = m.value_of("asset_db_path").map(PathBuf::from);
-
-        let default_daemon_port = match network_type {
-            #[cfg(not(feature = "liquid"))]
-            Network::Bitcoin => 8332,
-            #[cfg(not(feature = "liquid"))]
-            Network::Testnet => 18332,
-            #[cfg(not(feature = "liquid"))]
-            Network::Regtest => 18443,
-            #[cfg(not(feature = "liquid"))]
-            Network::Signet => 38332,
-
-            #[cfg(feature = "liquid")]
-            Network::Liquid => 7041,
-            #[cfg(feature = "liquid")]
-            Network::LiquidTestnet | Network::LiquidRegtest => 7040,
-        };
-        let default_electrum_port = match network_type {
-            #[cfg(not(feature = "liquid"))]
-            Network::Bitcoin => 50001,
-            #[cfg(not(feature = "liquid"))]
-            Network::Testnet => 60001,
-            #[cfg(not(feature = "liquid"))]
-            Network::Regtest => 60401,
-            #[cfg(not(feature = "liquid"))]
-            Network::Signet => 60601,
-
-            #[cfg(feature = "liquid")]
-            Network::Liquid => 51000,
-            #[cfg(feature = "liquid")]
-            Network::LiquidTestnet => 51301,
-            #[cfg(feature = "liquid")]
-            Network::LiquidRegtest => 51401,
-        };
-        let default_http_port = match network_type {
-            #[cfg(not(feature = "liquid"))]
-            Network::Bitcoin => 3000,
-            #[cfg(not(feature = "liquid"))]
-            Network::Testnet => 3001,
-            #[cfg(not(feature = "liquid"))]
-            Network::Regtest => 3002,
-            #[cfg(not(feature = "liquid"))]
-            Network::Signet => 3003,
-
-            #[cfg(feature = "liquid")]
-            Network::Liquid => 3000,
-            #[cfg(feature = "liquid")]
-            Network::LiquidTestnet => 3001,
-            #[cfg(feature = "liquid")]
-            Network::LiquidRegtest => 3002,
-        };
-        let default_monitoring_port = match network_type {
-            #[cfg(not(feature = "liquid"))]
-            Network::Bitcoin => 4224,
-            #[cfg(not(feature = "liquid"))]
-            Network::Testnet => 14224,
-            #[cfg(not(feature = "liquid"))]
-            Network::Regtest => 24224,
-            #[cfg(not(feature = "liquid"))]
-            Network::Signet => 54224,
-
-            #[cfg(feature = "liquid")]
-            Network::Liquid => 34224,
-            #[cfg(feature = "liquid")]
-            Network::LiquidTestnet => 44324,
-            #[cfg(feature = "liquid")]
-            Network::LiquidRegtest => 44224,
-        };
+        let default_daemon_port = 8332;
+        let default_electrum_port = 50001;
+        let default_http_port = 3000;
+        let default_monitoring_port = 4224;
 
         let daemon_rpc_addr: SocketAddr = str_to_socketaddr(
             m.value_of("daemon_rpc_addr")
@@ -399,9 +329,7 @@ impl Config {
                 default_dir
             });
 
-        if let Some(network_subdir) = get_network_subdir(network_type) {
-            daemon_dir.push(network_subdir);
-        }
+        daemon_dir.push(network_name);
         let blocks_dir = m
             .value_of("blocks_dir")
             .map(PathBuf::from)
@@ -429,7 +357,10 @@ impl Config {
         log.init().expect("logging initialization failed");
         let config = Config {
             log,
-            network_type,
+            network_name: network_name.to_string(),
+            p2sh_prefix: p2sh_prefix.map(|v| v.parse::<u8>().unwrap()),
+            p2pkh_prefix: p2pkh_prefix.map(|v| v.parse::<u8>().unwrap()),
+            bech32_prefix: bech32_prefix.map(|v| v.to_string()),
             db_path,
             daemon_dir,
             blocks_dir,
@@ -438,9 +369,9 @@ impl Config {
             daemon_parallelism: value_t_or_exit!(m, "daemon_parallelism", usize),
             cookie,
             magic: m.value_of("magic").map(|v| u32::from_le_bytes(<&[u8] as TryInto<[u8; 4]>>::try_into(<Vec<u8> as AsRef<[u8]>>::as_ref(&hex::decode(&v.to_owned()).unwrap())).unwrap())),
-            utxos_limit: value_t_or_exit!(m, "utxos_limit", usize),
+            utxos_limit: usize::MAX,
             electrum_rpc_addr,
-            electrum_txs_limit: value_t_or_exit!(m, "electrum_txs_limit", usize),
+            electrum_txs_limit: usize::MAX,
             electrum_banner,
             electrum_rpc_logging: m
                 .value_of("electrum_rpc_logging")

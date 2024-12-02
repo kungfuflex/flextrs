@@ -56,7 +56,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         config.daemon_rpc_addr,
         config.daemon_parallelism,
         config.cookie_getter(),
-        config.network_type,
+        config.network_name.clone(),
         signal.clone(),
         &metrics,
     )?);

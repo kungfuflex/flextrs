@@ -25,6 +25,12 @@ And the slight difference for the usage of `--network`
 
 Example `--network` could be either `testnet3` or `testnet4` instead of supplying `testnet` as was the case with the Blockstream electrs implementation.
 
+A full example of invocation for dogecoin:
+
+```sh
+./flextrs/target/release/flextrs --network dogecoin --daemon-db-dir ~/.dogecoin --db-dir ~/.dogecoin-flextrs --auth 'dogecoinrpc:dogecoinrpc' --daemon-rpc-addr 127.0.0.1:22555 --p2sh-prefix 22 --p2pkh-prefix 30 --bech32-prefix dc --magic c0c0c0c0
+```
+
 ## Author
 
 flex

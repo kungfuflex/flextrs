@@ -5,6 +5,8 @@ pub use bitcoin::{
     Transaction, TxIn, TxOut, Txid,
 };
 
+use std::convert::{TryInto};
+
 #[cfg(feature = "liquid")]
 pub use {
     crate::elements::asset,
@@ -14,6 +16,9 @@ pub use {
     },
 };
 
+use bitcoin::hashes::{Hash};
+use crate::config::{get_config};
+use crate::hex;
 use bitcoin::blockdata::constants::genesis_block;
 pub use bitcoin::network::Network as BNetwork;
 
@@ -22,7 +27,6 @@ pub type Value = u64;
 #[cfg(feature = "liquid")]
 pub use confidential::Value;
 
-use crate::config::{get_config};
 #[derive(Debug, Copy, Clone, PartialEq, Hash, Serialize, Ord, PartialOrd, Eq)]
 pub enum Network {
     #[cfg(not(feature = "liquid"))]
@@ -116,11 +120,10 @@ impl Network {
     }
 }
 
-pub fn genesis_hash(network: Network) -> BlockHash {
-    #[cfg(not(feature = "liquid"))]
-    return bitcoin_genesis_hash(network.into());
-    #[cfg(feature = "liquid")]
-    return liquid_genesis_hash(network);
+pub fn genesis_hash(_network: Network) -> BlockHash {
+  let byte_array_vec: Vec<u8> = hex::decode(get_config().genesis_hash.unwrap()).unwrap();
+  let byte_array_ref: &[u8] = &byte_array_vec;
+  BlockHash::from_byte_array(byte_array_ref.try_into().unwrap())
 }
 
 pub fn bitcoin_genesis_hash(network: BNetwork) -> bitcoin::BlockHash {

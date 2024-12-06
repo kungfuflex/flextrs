@@ -1,4 +1,4 @@
-use crate::chain::{Network, Transaction, TxOut};
+use crate::chain::{Transaction, TxOut};
 use std::collections::HashMap;
 
 const VSIZE_BIN_WIDTH: u64 = 50_000; // in vbytes

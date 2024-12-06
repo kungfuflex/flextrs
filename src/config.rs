@@ -26,6 +26,7 @@ pub struct Config {
     pub p2sh_prefix: Option<u8>,
     pub p2pkh_prefix: Option<u8>,
     pub bech32_prefix: Option<String>,
+    pub genesis_hash: Option<String>,
     pub db_path: PathBuf,
     pub daemon_dir: PathBuf,
     pub blocks_dir: PathBuf,
@@ -211,6 +212,7 @@ impl Config {
             .arg(Arg::with_name("p2sh_prefix").long("p2sh-prefix").help("p2sh prefix").takes_value(true))
             .arg(Arg::with_name("p2pkh_prefix").long("p2pkh-prefix").help("p2pkh prefix").takes_value(true))
             .arg(Arg::with_name("bech32_prefix").long("bech32-prefix").help("bech32 prefix").takes_value(true))
+            .arg(Arg::with_name("genesis_hash").long("genesis-hash").help("genesis hash").takes_value(true))
             .arg(
                 Arg::with_name("utxos_limit")
                     .long("utxos-limit")
@@ -338,6 +340,7 @@ impl Config {
             .map(PathBuf::from)
             .unwrap_or_else(|| daemon_dir.join("blocks"));
         let auth = m.value_of("auth").map(|s| s.to_owned());
+        let genesis_hash = m.value_of("genesis_hash").map(|s| s.to_owned());
         let cookie = if auth.is_some() { Some(auth.clone().unwrap()) } else { m.value_of("cookie").map(|s| s.to_owned()) };
 
         let electrum_banner = m.value_of("electrum_banner").map_or_else(
@@ -364,6 +367,7 @@ impl Config {
             p2sh_prefix: p2sh_prefix.map(|v| v.parse::<u8>().unwrap()),
             p2pkh_prefix: p2pkh_prefix.map(|v| v.parse::<u8>().unwrap()),
             bech32_prefix: bech32_prefix.map(|v| v.to_string()),
+            genesis_hash: genesis_hash.map(|v| v.to_string()),
             db_path,
             daemon_dir,
             blocks_dir,
@@ -371,7 +375,7 @@ impl Config {
             daemon_rpc_addr,
             daemon_parallelism: value_t_or_exit!(m, "daemon_parallelism", usize),
             cookie,
-            magic: m.value_of("magic").map(|v| u32::from_le_bytes(<&[u8] as TryInto<[u8; 4]>>::try_into(<Vec<u8> as AsRef<[u8]>>::as_ref(&hex::decode(&v.to_owned()).unwrap())).unwrap())),
+            magic: m.value_of("magic").map(|v| u32::from_be_bytes(<&[u8] as TryInto<[u8; 4]>>::try_into(<Vec<u8> as AsRef<[u8]>>::as_ref(&hex::decode(&v.to_owned()).unwrap())).unwrap())),
             utxos_limit: usize::MAX,
             electrum_rpc_addr,
             electrum_txs_limit: usize::MAX,

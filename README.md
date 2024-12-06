@@ -11,9 +11,10 @@ Documentation for the database schema and indexing process [is available here](d
 flextrs inherits its flags and usage from electrs, but the following flags are now added and required to initialize:
 
 - `--magic <hex digits for the magic bytes for the block>`
-- `--p2sh_prefix <number representing the p2sh magic byte>`
-- `--p2pkh_prefix <number representing the p2pkh magic byte>`
-- `--bech32_prefix <prefix for bech32 encoding>`
+- `--p2sh-prefix <number representing the p2sh magic byte>`
+- `--p2pkh-prefix <number representing the p2pkh magic byte>`
+- `--bech32-prefix <prefix for bech32 encoding>`
+- `--genesis-hash <blockhash hex>
 - `--auth <USERNAME:PASSWORD>`
 
 `--auth` can be used to use Basic credentials to the target Bitcoin RPC, if a `.cookie` file is not used.
@@ -28,7 +29,7 @@ Example `--network` could be either `testnet3` or `testnet4` instead of supplyin
 A full example of invocation for dogecoin:
 
 ```sh
-./flextrs/target/release/flextrs --network dogecoin --daemon-db-dir ~/.dogecoin --db-dir ~/.dogecoin-flextrs --auth 'dogecoinrpc:dogecoinrpc' --daemon-rpc-addr 127.0.0.1:22555 --p2sh-prefix 22 --p2pkh-prefix 30 --bech32-prefix dc --magic c0c0c0c0
+./flextrs/target/release/flextrs --network dogecoin --daemon-db-dir ~/.dogecoin --db-dir ~/.dogecoin-flextrs --auth 'dogecoinrpc:dogecoinrpc' --daemon-rpc-addr 127.0.0.1:22555 --p2sh-prefix 22 --p2pkh-prefix 30 --bech32-prefix dc --magic c0c0c0c0 --genesis-hash 1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691
 ```
 
 ## Author

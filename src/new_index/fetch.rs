@@ -234,6 +234,7 @@ fn parse_blocks(blob: Vec<u8>, magic: u32) -> Result<Vec<SizedBlock>> {
         // by peeking the cursor (and skipping previous `magic` and `block_size`).
         match u32::consensus_decode(&mut cursor) {
             Ok(value) => {
+
                 if magic == value {
                     cursor.set_position(start);
                     continue;

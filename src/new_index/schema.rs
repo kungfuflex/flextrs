@@ -23,7 +23,7 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 use crate::chain::{
-    BlockHash, BlockHeader, Network, OutPoint, Script, Transaction, TxOut, Txid, Value,
+    BlockHash, BlockHeader, OutPoint, Script, Transaction, TxOut, Txid, Value,
 };
 use crate::config::Config;
 use crate::daemon::Daemon;
@@ -31,7 +31,7 @@ use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 use crate::util::{
     bincode, full_hash, has_prevout, is_spendable, BlockHeaderMeta, BlockId, BlockMeta,
-    BlockStatus, Bytes, HeaderEntry, HeaderList, ScriptToAddr,
+    BlockStatus, Bytes, HeaderEntry, HeaderList
 };
 
 use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB};
@@ -174,8 +174,7 @@ pub struct Indexer {
 struct IndexerConfig {
     light_mode: bool,
     address_search: bool,
-    index_unspendables: bool,
-    network: String
+    index_unspendables: bool
 }
 
 impl From<&Config> for IndexerConfig {
@@ -183,8 +182,7 @@ impl From<&Config> for IndexerConfig {
         IndexerConfig {
             light_mode: config.light_mode,
             address_search: config.address_search,
-            index_unspendables: config.index_unspendables,
-            network: config.network_name.clone()
+            index_unspendables: config.index_unspendables
         }
     }
 }

@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
-use crate::config::{Config, get_config};
+use crate::config::{get_config};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -22,7 +22,7 @@ use bitcoin::consensus::encode::{deserialize, serialize_hex};
 #[cfg(feature = "liquid")]
 use elements::encode::{deserialize, serialize_hex};
 
-use crate::chain::{Block, BlockHash, BlockHeader, Network, Transaction, Txid};
+use crate::chain::{Block, BlockHash, BlockHeader, Transaction, Txid};
 use crate::metrics::{HistogramOpts, HistogramVec, Metrics};
 use crate::signal::Waiter;
 use crate::util::{HeaderList, DEFAULT_BLOCKHASH};

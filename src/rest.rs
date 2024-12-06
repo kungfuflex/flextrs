@@ -1,5 +1,5 @@
 use crate::chain::{
-    address, BlockHash, Network, OutPoint, Script, Sequence, Transaction, TxIn, TxMerkleNode,
+    address, BlockHash, OutPoint, Script, Sequence, Transaction, TxIn, TxMerkleNode,
     TxOut, Txid,
 };
 use crate::config::{get_config, Config};
@@ -8,10 +8,10 @@ use bitcoin::address::{AddressEncoding, Payload};
 use crate::new_index::{compute_script_hash, Query, SpendingInput, Utxo};
 use crate::util::{
     create_socket, electrum_merkle, extract_tx_prevouts, get_innerscripts, get_tx_fee, has_prevout,
-    is_coinbase, BlockHeaderMeta, BlockId, FullHash, ScriptToAddr, ScriptToAsm, TransactionStatus,
+    is_coinbase, BlockHeaderMeta, BlockId, FullHash, ScriptToAsm, TransactionStatus,
     DEFAULT_BLOCKHASH,
 };
-use bitcoin::bech32::{Hrp, hrp};
+use bitcoin::bech32::{Hrp};
 
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode;
@@ -296,7 +296,7 @@ pub fn to_address_str(script: &Script) -> Option<String> {
 }
       
 impl TxOutValue {
-    fn new(txout: &TxOut, config: &Config) -> Self {
+    fn new(txout: &TxOut, _config: &Config) -> Self {
         #[cfg(not(feature = "liquid"))]
         let value = txout.value.to_sat();
         #[cfg(feature = "liquid")]

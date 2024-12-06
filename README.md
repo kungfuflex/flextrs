@@ -28,7 +28,7 @@ Example `--network` could be either `testnet3` or `testnet4` instead of supplyin
 A full example of invocation for dogecoin:
 
 ```sh
-./flextrs/target/release/flextrs --network dogecoin --daemon-db-dir ~/.dogecoin --db-dir ~/.dogecoin-flextrs --auth 'dogecoinrpc:dogecoinrpc' --daemon-rpc-addr 127.0.0.1:22555 --p2sh-prefix 22 --p2pkh-prefix 30 --bech32-prefix dc --magic c0c0c0c0
+./flextrs/target/debug/flextrs --network dogecoin --db-dir ~/dogecoin --auth 'dogecoinrpc:dogecoinrpc' --daemon-rpc-addr 127.0.0.1:22555 --p2sh-prefix 22 --p2pkh-prefix 30 --bech32-prefix dc --magic c0c0c0c0  --log-filters DEBUG --db-dir ~/dogecoin --daemon-db-dir ~/.dogecoin-flextrs
 ```
 
 ## Author

@@ -337,6 +337,7 @@ impl Daemon {
                 &["method", "dir"],
             ),
         };
+        info!("magic: {}", daemon.magic());
         let network_info = daemon.getnetworkinfo()?;
         info!("{:?}", network_info);
         if network_info.version < 16_00_00 {

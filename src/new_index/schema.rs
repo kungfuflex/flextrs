@@ -7,7 +7,6 @@ use crypto::sha2::Sha256;
 use hex::FromHex;
 use itertools::Itertools;
 use rayon::prelude::*;
-use crate::rest::{to_address_str};
 
 #[cfg(not(feature = "liquid"))]
 use bitcoin::consensus::encode::{deserialize, serialize};
@@ -23,7 +22,7 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 use crate::chain::{
-    BlockHash, BlockHeader, OutPoint, Script, Transaction, TxOut, Txid, Value,
+    BlockHash, BlockHeader, Network, OutPoint, Script, Transaction, TxOut, Txid, Value,
 };
 use crate::config::Config;
 use crate::daemon::Daemon;
@@ -31,7 +30,7 @@ use crate::errors::*;
 use crate::metrics::{Gauge, HistogramOpts, HistogramTimer, HistogramVec, MetricOpts, Metrics};
 use crate::util::{
     bincode, full_hash, has_prevout, is_spendable, BlockHeaderMeta, BlockId, BlockMeta,
-    BlockStatus, Bytes, HeaderEntry, HeaderList
+    BlockStatus, Bytes, HeaderEntry, HeaderList, ScriptToAddr,
 };
 
 use crate::new_index::db::{DBFlush, DBRow, ReverseScanIterator, ScanIterator, DB};
@@ -174,7 +173,10 @@ pub struct Indexer {
 struct IndexerConfig {
     light_mode: bool,
     address_search: bool,
-    index_unspendables: bool
+    index_unspendables: bool,
+    network: Network,
+    #[cfg(feature = "liquid")]
+    parent_network: crate::chain::BNetwork,
 }
 
 impl From<&Config> for IndexerConfig {
@@ -182,7 +184,10 @@ impl From<&Config> for IndexerConfig {
         IndexerConfig {
             light_mode: config.light_mode,
             address_search: config.address_search,
-            index_unspendables: config.index_unspendables
+            index_unspendables: config.index_unspendables,
+            network: config.network_type,
+            #[cfg(feature = "liquid")]
+            parent_network: config.parent_network,
         }
     }
 }
@@ -192,7 +197,7 @@ pub struct ChainQuery {
     daemon: Arc<Daemon>,
     light_mode: bool,
     duration: HistogramVec,
-    network: String
+    network: Network,
 }
 
 // TODO: &[Block] should be an iterator / a queue.
@@ -350,7 +355,7 @@ impl ChainQuery {
             store,
             daemon,
             light_mode: config.light_mode,
-            network: config.network_name.clone(),
+            network: config.network_type,
             duration: metrics.histogram_vec(
                 HistogramOpts::new("query_duration", "Index query duration (in seconds)"),
                 &["name"],
@@ -358,8 +363,8 @@ impl ChainQuery {
         }
     }
 
-    pub fn network(&self) -> String {
-        self.network.clone()
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     pub fn store(&self) -> &Store {
@@ -1093,7 +1098,7 @@ fn index_transaction(
             rows.push(history.into_row());
 
             if iconfig.address_search {
-                if let Some(row) = addr_search_row(&txo.script_pubkey) {
+                if let Some(row) = addr_search_row(&txo.script_pubkey, iconfig.network) {
                     rows.push(row);
                 }
             }
@@ -1140,8 +1145,8 @@ fn index_transaction(
     );
 }
 
-fn addr_search_row(spk: &Script) -> Option<DBRow> {
-    to_address_str(spk).map(|address| DBRow {
+fn addr_search_row(spk: &Script, network: Network) -> Option<DBRow> {
+    spk.to_address_str(network).map(|address| DBRow {
         key: [b"a", address.as_bytes()].concat(),
         value: vec![],
     })

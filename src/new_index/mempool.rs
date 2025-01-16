@@ -11,7 +11,7 @@ use std::iter::FromIterator;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use crate::chain::{deserialize, BlockHash, OutPoint, Transaction, TxOut, Txid};
+use crate::chain::{deserialize, BlockHash, Network, OutPoint, Transaction, TxOut, Txid};
 use crate::config::Config;
 use crate::daemon::Daemon;
 use crate::errors::*;
@@ -95,8 +95,8 @@ impl Mempool {
         }
     }
 
-    pub fn network(&self) -> String {
-        self.config.network_name.clone()
+    pub fn network(&self) -> Network {
+        self.config.network_type
     }
 
     pub fn lookup_txn(&self, txid: &Txid) -> Option<Transaction> {
@@ -339,7 +339,7 @@ impl Mempool {
             let txid_bytes = full_hash(&txid[..]);
 
             // Get feeinfo for caching and recent tx overview
-            let feeinfo = TxFeeInfo::new(&tx, &prevouts);
+            let feeinfo = TxFeeInfo::new(&tx, &prevouts, self.config.network_type);
 
             // recent is an ArrayDeque that automatically evicts the oldest elements
             self.recent.push_front(TxOverview {
@@ -404,7 +404,7 @@ impl Mempool {
             #[cfg(feature = "liquid")]
             asset::index_mempool_tx_assets(
                 &tx,
-                self.config.network_name.clone(),
+                self.config.network_type,
                 self.config.parent_network,
                 &mut self.asset_history,
                 &mut self.asset_issuance,
@@ -526,6 +526,15 @@ impl Mempool {
                 indexed_txids.len() + fetched_txs.len(),
                 new_txids.len()
             );
+
+            {
+                let mempool = mempool.read().unwrap();
+
+                mempool.count.with_label_values(&["all_txs"]).set(all_txids.len() as f64);
+                mempool.count.with_label_values(&["fetched_txs"]).set((indexed_txids.len() + fetched_txs.len()) as f64);
+                mempool.count.with_label_values(&["missing_txs"]).set(new_txids.len() as f64);
+            }
+
             let new_txs = daemon.gettransactions_available(&new_txids)?;
 
             // Abort if the chain tip moved while fetching transactions

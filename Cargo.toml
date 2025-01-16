@@ -1,8 +1,8 @@
 [package]
 name = "flextrs"
-version = "0.1.0"
+version = "0.4.1"
 authors = ["flex <judoflexchop@gmail.com>"]
-description = "A more flexible electrs from Blockstream"
+description = "An efficient re-implementation of Electrum Server in Rust (flex variant)"
 license = "MIT"
 homepage = "https://github.com/kungfuflex/flextrs"
 repository = "https://github.com/kungfuflex/flextrs"
@@ -10,6 +10,7 @@ keywords = ["bitcoin", "electrum", "server", "index", "database"]
 documentation = "https://docs.rs/electrs/"
 readme = "README.md"
 edition = "2018"
+default-run = "flextrs"
 
 [features]
 liquid = ["elements"]
@@ -57,7 +58,6 @@ tokio = { version = "1", features = ["sync", "macros"] }
 # optional dependencies for electrum-discovery
 electrum-client = { version = "0.8", optional = true }
 zmq = "0.10.0"
-anyhow = "1.0.93"
 
 
 [dev-dependencies]

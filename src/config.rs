@@ -5,8 +5,6 @@ use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::convert::{TryInto};
-use crate::hex;
 use stderrlog;
 
 use crate::chain::Network;
@@ -18,21 +16,18 @@ use bitcoin::Network as BNetwork;
 
 const ELECTRS_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+
+
 #[derive(Debug, Clone)]
 pub struct Config {
     // See below for the documentation of each field:
     pub log: stderrlog::StdErrLog,
-    pub network_name: String,
-    pub p2sh_prefix: Option<u8>,
-    pub p2pkh_prefix: Option<u8>,
-    pub bech32_prefix: Option<String>,
-    pub genesis_hash: Option<String>,
+    pub network_type: Network,
     pub db_path: PathBuf,
     pub daemon_dir: PathBuf,
     pub blocks_dir: PathBuf,
     pub daemon_rpc_addr: SocketAddr,
     pub daemon_parallelism: usize,
-    pub magic: Option<u32>,
     pub cookie: Option<String>,
     pub auth: Option<String>,
     pub electrum_rpc_addr: SocketAddr,
@@ -79,12 +74,24 @@ fn str_to_socketaddr(address: &str, what: &str) -> SocketAddr {
         .unwrap()
 }
 
-static mut _CONFIG: Option<Config> = None;
+use std::sync::Once;
 
-pub fn get_config() -> Config {
-  unsafe {
-    _CONFIG.as_ref().unwrap().clone()
-  }
+static mut GLOBAL_CONFIG: Option<Config> = None;
+static INIT: Once = Once::new();
+
+pub fn set_global_config(config: Config) {
+    INIT.call_once(|| unsafe {
+        GLOBAL_CONFIG = Some(config);
+    });
+}
+
+pub fn get_global_config() -> Config {
+    unsafe {
+        GLOBAL_CONFIG
+            .as_ref()
+            .expect("Config not initialized")
+            .clone()
+    }
 }
 
 impl Config {
@@ -132,15 +139,12 @@ impl Config {
                     .help("JSONRPC authentication cookie ('USER:PASSWORD', default: read from ~/.bitcoin/.cookie)")
                     .takes_value(true),
             )
-            .arg(Arg::with_name("auth")
-                .long("auth")
-                .help("JSONRPC authentication USER:PASSWORD string")
-                .takes_value(true)
+            .arg(
+                Arg::with_name("auth")
+                    .long("auth")
+                    .help("JSONRPC authentication ('USER:PASSWORD', default: bitcoinrpc:bitcoinrpc)")
+                    .takes_value(true),
             )
-            .arg(Arg::with_name("magic")
-                .long("magic")
-                .help("magic bytes (in hex) for target blockchain")
-                .takes_value(true))
             .arg(
                 Arg::with_name("network")
                     .long("network")
@@ -209,10 +213,6 @@ impl Config {
                     .help("Path to file with list of scripts to pre-cache")
                     .takes_value(true)
             )
-            .arg(Arg::with_name("p2sh_prefix").long("p2sh-prefix").help("p2sh prefix").takes_value(true))
-            .arg(Arg::with_name("p2pkh_prefix").long("p2pkh-prefix").help("p2pkh prefix").takes_value(true))
-            .arg(Arg::with_name("bech32_prefix").long("bech32-prefix").help("bech32 prefix").takes_value(true))
-            .arg(Arg::with_name("genesis_hash").long("genesis-hash").help("genesis hash").takes_value(true))
             .arg(
                 Arg::with_name("utxos_limit")
                     .long("utxos-limit")
@@ -288,16 +288,89 @@ impl Config {
         let m = args.get_matches();
 
         let network_name = m.value_of("network").unwrap_or("mainnet");
-        let p2sh_prefix = m.value_of("p2sh_prefix");
-        let p2pkh_prefix = m.value_of("p2pkh_prefix");
-        let bech32_prefix = m.value_of("bech32_prefix");
+        let network_type = Network::from(network_name);
         let db_dir = Path::new(m.value_of("db_dir").unwrap_or("./db"));
         let db_path = db_dir.join(network_name);
 
-        let default_daemon_port = 8332;
-        let default_electrum_port = 50001;
-        let default_http_port = 3000;
-        let default_monitoring_port = 4224;
+        #[cfg(feature = "liquid")]
+        let parent_network = m
+            .value_of("parent_network")
+            .map(|s| s.parse().expect("invalid parent network"))
+            .unwrap_or_else(|| match network_type {
+                Network::Liquid => BNetwork::Bitcoin,
+                // XXX liquid testnet/regtest don't have a parent chain
+                Network::LiquidTestnet | Network::LiquidRegtest => BNetwork::Regtest,
+            });
+
+        #[cfg(feature = "liquid")]
+        let asset_db_path = m.value_of("asset_db_path").map(PathBuf::from);
+
+        let default_daemon_port = match network_type {
+            #[cfg(not(feature = "liquid"))]
+            Network::Bitcoin => 8332,
+            #[cfg(not(feature = "liquid"))]
+            Network::Testnet => 18332,
+            #[cfg(not(feature = "liquid"))]
+            Network::Regtest => 18443,
+            #[cfg(not(feature = "liquid"))]
+            Network::Signet => 38332,
+
+            #[cfg(feature = "liquid")]
+            Network::Liquid => 7041,
+            #[cfg(feature = "liquid")]
+            Network::LiquidTestnet | Network::LiquidRegtest => 7040,
+        };
+        let default_electrum_port = match network_type {
+            #[cfg(not(feature = "liquid"))]
+            Network::Bitcoin => 50001,
+            #[cfg(not(feature = "liquid"))]
+            Network::Testnet => 60001,
+            #[cfg(not(feature = "liquid"))]
+            Network::Regtest => 60401,
+            #[cfg(not(feature = "liquid"))]
+            Network::Signet => 60601,
+
+            #[cfg(feature = "liquid")]
+            Network::Liquid => 51000,
+            #[cfg(feature = "liquid")]
+            Network::LiquidTestnet => 51301,
+            #[cfg(feature = "liquid")]
+            Network::LiquidRegtest => 51401,
+        };
+        let default_http_port = match network_type {
+            #[cfg(not(feature = "liquid"))]
+            Network::Bitcoin => 3000,
+            #[cfg(not(feature = "liquid"))]
+            Network::Testnet => 3001,
+            #[cfg(not(feature = "liquid"))]
+            Network::Regtest => 3002,
+            #[cfg(not(feature = "liquid"))]
+            Network::Signet => 3003,
+
+            #[cfg(feature = "liquid")]
+            Network::Liquid => 3000,
+            #[cfg(feature = "liquid")]
+            Network::LiquidTestnet => 3001,
+            #[cfg(feature = "liquid")]
+            Network::LiquidRegtest => 3002,
+        };
+        let default_monitoring_port = match network_type {
+            #[cfg(not(feature = "liquid"))]
+            Network::Bitcoin => 4224,
+            #[cfg(not(feature = "liquid"))]
+            Network::Testnet => 14224,
+            #[cfg(not(feature = "liquid"))]
+            Network::Regtest => 24224,
+            #[cfg(not(feature = "liquid"))]
+            Network::Signet => 54224,
+
+            #[cfg(feature = "liquid")]
+            Network::Liquid => 34224,
+            #[cfg(feature = "liquid")]
+            Network::LiquidTestnet => 44324,
+            #[cfg(feature = "liquid")]
+            Network::LiquidRegtest => 44224,
+        };
 
         let daemon_rpc_addr: SocketAddr = str_to_socketaddr(
             m.value_of("daemon_rpc_addr")
@@ -334,14 +407,15 @@ impl Config {
                 default_dir
             });
 
-        daemon_dir.push(network_name);
+        if let Some(network_subdir) = get_network_subdir(network_type) {
+            daemon_dir.push(network_subdir);
+        }
         let blocks_dir = m
             .value_of("blocks_dir")
             .map(PathBuf::from)
             .unwrap_or_else(|| daemon_dir.join("blocks"));
+        let cookie = m.value_of("cookie").map(|s| s.to_owned());
         let auth = m.value_of("auth").map(|s| s.to_owned());
-        let genesis_hash = m.value_of("genesis_hash").map(|s| s.to_owned());
-        let cookie = if auth.is_some() { Some(auth.clone().unwrap()) } else { m.value_of("cookie").map(|s| s.to_owned()) };
 
         let electrum_banner = m.value_of("electrum_banner").map_or_else(
             || format!("Welcome to electrs-esplora {}", ELECTRS_VERSION),
@@ -363,22 +437,17 @@ impl Config {
         log.init().expect("logging initialization failed");
         let config = Config {
             log,
-            network_name: network_name.to_string(),
-            p2sh_prefix: p2sh_prefix.map(|v| v.parse::<u8>().unwrap()),
-            p2pkh_prefix: p2pkh_prefix.map(|v| v.parse::<u8>().unwrap()),
-            bech32_prefix: bech32_prefix.map(|v| v.to_string()),
-            genesis_hash: genesis_hash.map(|v| v.to_string()),
+            network_type,
             db_path,
             daemon_dir,
             blocks_dir,
-            auth: auth.clone(),
             daemon_rpc_addr,
             daemon_parallelism: value_t_or_exit!(m, "daemon_parallelism", usize),
             cookie,
-            magic: m.value_of("magic").map(|v| u32::from_be_bytes(<&[u8] as TryInto<[u8; 4]>>::try_into(<Vec<u8> as AsRef<[u8]>>::as_ref(&hex::decode(&v.to_owned()).unwrap())).unwrap())),
-            utxos_limit: usize::MAX,
+            auth,
+            utxos_limit: value_t_or_exit!(m, "utxos_limit", usize),
             electrum_rpc_addr,
-            electrum_txs_limit: usize::MAX,
+            electrum_txs_limit: value_t_or_exit!(m, "electrum_txs_limit", usize),
             electrum_banner,
             electrum_rpc_logging: m
                 .value_of("electrum_rpc_logging")
@@ -408,9 +477,7 @@ impl Config {
             tor_proxy: m.value_of("tor_proxy").map(|s| s.parse().unwrap()),
         };
         eprintln!("{:?}", config);
-        unsafe {
-          _CONFIG = Some(config.clone());
-        }
+        set_global_config(config.clone());
         config
     }
 

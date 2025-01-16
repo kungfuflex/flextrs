@@ -1,4 +1,4 @@
-use crate::chain::{Transaction, TxOut};
+use crate::chain::{Network, Transaction, TxOut};
 use std::collections::HashMap;
 
 const VSIZE_BIN_WIDTH: u64 = 50_000; // in vbytes
@@ -10,8 +10,8 @@ pub struct TxFeeInfo {
 }
 
 impl TxFeeInfo {
-    pub fn new(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>) -> Self {
-        let fee = get_tx_fee(tx, prevouts);
+    pub fn new(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>, network: Network) -> Self {
+        let fee = get_tx_fee(tx, prevouts, network);
 
         let weight = tx.weight();
         #[cfg(not(feature = "liquid"))] // rust-bitcoin has a wrapper Weight type
@@ -27,7 +27,8 @@ impl TxFeeInfo {
     }
 }
 
-pub fn get_tx_fee(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>) -> u64 {
+#[cfg(not(feature = "liquid"))]
+pub fn get_tx_fee(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>, _network: Network) -> u64 {
     if tx.is_coinbase() {
         return 0;
     }
@@ -38,6 +39,11 @@ pub fn get_tx_fee(tx: &Transaction, prevouts: &HashMap<u32, &TxOut>) -> u64 {
         .sum();
     let total_out: u64 = tx.output.iter().map(|vout| vout.value.to_sat()).sum();
     total_in - total_out
+}
+
+#[cfg(feature = "liquid")]
+pub fn get_tx_fee(tx: &Transaction, _prevouts: &HashMap<u32, &TxOut>, network: Network) -> u64 {
+    tx.fee_in(*network.native_asset())
 }
 
 pub fn make_fee_histogram(mut entries: Vec<&TxFeeInfo>) -> Vec<(f64, u64)> {

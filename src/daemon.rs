@@ -3,14 +3,13 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::io::{BufRead, BufReader, Lines, Write};
 use std::net::{SocketAddr, TcpStream};
-use crate::config::{get_config};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{env, fs, io};
 
-use crate::block::{AuxpowHeader, AuxpowBlock};
+use crate::config::{get_global_config};
 use base64::prelude::{Engine, BASE64_STANDARD};
 use error_chain::ChainedError;
 use hex::FromHex;
@@ -22,7 +21,7 @@ use bitcoin::consensus::encode::{deserialize, serialize_hex};
 #[cfg(feature = "liquid")]
 use elements::encode::{deserialize, serialize_hex};
 
-use crate::chain::{Block, BlockHash, BlockHeader, Transaction, Txid};
+use crate::chain::{Block, BlockHash, BlockHeader, Network, Transaction, Txid};
 use crate::metrics::{HistogramOpts, HistogramVec, Metrics};
 use crate::signal::Waiter;
 use crate::util::{HeaderList, DEFAULT_BLOCKHASH};
@@ -62,13 +61,16 @@ fn header_from_value(value: Value) -> Result<BlockHeader> {
         .as_str()
         .chain_err(|| format!("non-string header: {}", value))?;
     let header_bytes = Vec::from_hex(header_hex).chain_err(|| "non-hex header")?;
-    Ok(AuxpowHeader::parse(&mut std::io::Cursor::new(header_bytes)).unwrap().into())
+    Ok(
+        deserialize(&header_bytes)
+            .chain_err(|| format!("failed to parse header {}", header_hex))?,
+    )
 }
 
 fn block_from_value(value: Value) -> Result<Block> {
     let block_hex = value.as_str().chain_err(|| "non-string block")?;
     let block_bytes = Vec::from_hex(block_hex).chain_err(|| "non-hex block")?;
-    Ok(AuxpowBlock::parse(&mut std::io::Cursor::new(block_bytes)).unwrap().to_consensus())
+    Ok(deserialize(&block_bytes).chain_err(|| format!("failed to parse block {}", block_hex))?)
 }
 
 fn tx_from_value(value: Value) -> Result<Transaction> {
@@ -87,10 +89,13 @@ fn parse_jsonrpc_reply(mut reply: Value, method: &str, expected_id: u64) -> Resu
         if let Some(err) = reply_obj.get_mut("error") {
             if !err.is_null() {
                 if let Some(code) = parse_error_code(&err) {
+                    let msg = err["message"]
+                        .as_str()
+                        .map_or_else(|| err.to_string(), |s| s.to_string());
                     match code {
                         // RPC_IN_WARMUP -> retry by later reconnection
                         -28 => bail!(ErrorKind::Connection(err.to_string())),
-                        code => bail!(ErrorKind::RpcError(code, err.take(), method.to_string())),
+                        code => bail!(ErrorKind::RpcError(code, msg, method.to_string())),
                     }
                 }
             }
@@ -191,10 +196,10 @@ impl Connection {
     }
 
     fn send(&mut self, request: &str) -> Result<()> {
-        let cookie = &self.cookie_getter.get()?;
+        let auth = get_global_config().auth.unwrap_or_else(|| String::from(""));
         let msg = format!(
             "POST / HTTP/1.1\nAuthorization: Basic {}\nContent-Length: {}\n\n{}",
-            BASE64_STANDARD.encode(cookie),
+            BASE64_STANDARD.encode(auth),
             request.len(),
             request,
         );
@@ -287,7 +292,7 @@ impl Counter {
 pub struct Daemon {
     daemon_dir: PathBuf,
     blocks_dir: PathBuf,
-    network: String,
+    network: Network,
     conn: Mutex<Connection>,
     message_id: Counter, // for monotonic JSONRPC 'id'
     signal: Waiter,
@@ -306,7 +311,7 @@ impl Daemon {
         daemon_rpc_addr: SocketAddr,
         daemon_parallelism: usize,
         cookie_getter: Arc<dyn CookieGetter>,
-        network: String,
+        network: Network,
         signal: Waiter,
         metrics: &Metrics,
     ) -> Result<Daemon> {
@@ -337,7 +342,6 @@ impl Daemon {
                 &["method", "dir"],
             ),
         };
-        info!("magic: {}", daemon.magic());
         let network_info = daemon.getnetworkinfo()?;
         info!("{:?}", network_info);
         if network_info.version < 16_00_00 {
@@ -373,7 +377,7 @@ impl Daemon {
         Ok(Daemon {
             daemon_dir: self.daemon_dir.clone(),
             blocks_dir: self.blocks_dir.clone(),
-            network: self.network.clone(),
+            network: self.network,
             conn: Mutex::new(self.conn.lock().unwrap().reconnect()?),
             message_id: Counter::new(),
             signal: self.signal.clone(),
@@ -415,7 +419,7 @@ impl Daemon {
     }
 
     pub fn magic(&self) -> u32 {
-        get_config().magic.unwrap()
+        self.network.magic()
     }
 
     fn call_jsonrpc(&self, method: &str, request: &Value) -> Result<Value> {

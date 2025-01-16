@@ -5,8 +5,6 @@ pub use bitcoin::{
     Transaction, TxIn, TxOut, Txid,
 };
 
-use std::convert::{TryInto};
-
 #[cfg(feature = "liquid")]
 pub use {
     crate::elements::asset,
@@ -16,9 +14,6 @@ pub use {
     },
 };
 
-use bitcoin::hashes::{Hash};
-use crate::config::{get_config};
-use crate::hex;
 use bitcoin::blockdata::constants::genesis_block;
 pub use bitcoin::network::Network as BNetwork;
 
@@ -49,12 +44,7 @@ pub enum Network {
 impl Network {
     #[cfg(not(feature = "liquid"))]
     pub fn magic(self) -> u32 {
-        let c = get_config();
-        if let Some(magic) = c.magic {
-          magic
-        } else {
-          u32::from_le_bytes(BNetwork::from(self).magic().to_bytes())
-        }
+        u32::from_le_bytes(BNetwork::from(self).magic().to_bytes())
     }
 
     #[cfg(feature = "liquid")]
@@ -120,10 +110,11 @@ impl Network {
     }
 }
 
-pub fn genesis_hash(_network: Network) -> BlockHash {
-  let byte_array_vec: Vec<u8> = hex::decode(get_config().genesis_hash.unwrap()).unwrap();
-  let byte_array_ref: &[u8] = &byte_array_vec;
-  BlockHash::from_byte_array(byte_array_ref.try_into().unwrap())
+pub fn genesis_hash(network: Network) -> BlockHash {
+    #[cfg(not(feature = "liquid"))]
+    return bitcoin_genesis_hash(network.into());
+    #[cfg(feature = "liquid")]
+    return liquid_genesis_hash(network);
 }
 
 pub fn bitcoin_genesis_hash(network: BNetwork) -> bitcoin::BlockHash {

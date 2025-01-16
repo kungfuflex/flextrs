@@ -1,6 +1,7 @@
 extern crate error_chain;
 #[macro_use]
 extern crate log;
+
 extern crate flextrs;
 
 use crossbeam_channel::{self as channel};
@@ -56,7 +57,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         config.daemon_rpc_addr,
         config.daemon_parallelism,
         config.cookie_getter(),
-        config.network_name.clone(),
+        config.network_type,
         signal.clone(),
         &metrics,
     )?);
@@ -115,8 +116,8 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     let electrum_server = ElectrumRPC::start(Arc::clone(&config), Arc::clone(&query), &metrics);
 
     let main_loop_count = metrics.gauge(MetricOpts::new(
-        "electrs_main_loop_count",
-        "count of iterations of electrs main loop each 5 seconds or after interrupts",
+        "flextrs_main_loop_count",
+        "count of iterations of flextrs main loop each 5 seconds or after interrupts",
     ));
 
     loop {
@@ -154,9 +155,3 @@ fn main() {
         process::exit(1);
     }
 }
-
-/*
-fn main() {
-  println!("{:?}", Block::consensus_decode(&mut std::io::Cursor::new(hex::decode("0100000000000000000000000000000000000000000000000000000000000000000000004e7b2b9128fe0291db0693af2ae418b767e657cd407e80cb1434221eaea7a07a046f3566ffff001dbb0c78170101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff5504ffff001d01044c4c30332f4d61792f323032342030303030303030303030303030303030303030303165626435386332343439373062336161396437383362623030313031316662653865613865393865303065ffffffff0100f2052a010000002321000000000000000000000000000000000000000000000000000000000000000000ac00000000").unwrap())).unwrap());
-}
-*/

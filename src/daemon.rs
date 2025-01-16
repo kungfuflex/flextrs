@@ -8,6 +8,7 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{env, fs, io};
+use log::{info};
 
 use crate::config::{get_global_config};
 use base64::prelude::{Engine, BASE64_STANDARD};
@@ -203,6 +204,7 @@ impl Connection {
             request.len(),
             request,
         );
+        info!("{}", msg);
         self.tx.write_all(msg.as_bytes()).chain_err(|| {
             ErrorKind::Connection("disconnected from daemon while sending".to_owned())
         })
